@@ -1,4 +1,7 @@
+from datetime import datetime
+import os
 import shutil
+import uuid
 from fastapi import FastAPI, HTTPException, Depends, UploadFile
 from database import get_db
 from sqlalchemy.orm import Session
@@ -7,6 +10,8 @@ from typing import List
 import pyd
 
 app = FastAPI()
+MAX_FILE_SIZE_MB = 5
+UPLOAD_DIR = "files"
 
 @app.get("/film", response_model=List[pyd.FilmSchema])
 def get_all_film(db:Session=Depends(get_db)):
@@ -23,44 +28,104 @@ def get_film(film_id:int, db:Session=Depends(get_db)):
     return film
 
 
-# @app.post("/product", response_model=pyd.BaseProduct)
-# def create_product(product:pyd.CreateProduct, img: UploadFile, db:Session=Depends(get_db)):
-#     product_db = db.query(m.Product).filter(m.Product.name == product.name).first()
-#     if product_db:
-#         raise HTTPException(400, "Такой товар уже есть")
-#     if img.content_type not in ("image/png", "image/jpeg"):
-#         raise HTTPException(400, "Такой товар уже есть")
-#     with open(f"files/{img.filename}", "wb") as f:
-#         shutil.copyfileobj(img.file, f)
-#     product_db = m.Product()
-#     product_db.img = f"files/{img.filename}"
-#     product_db.name = product.name
-#     db.add(product_db)
-#     db.commit()
-#     return product_db
+@app.post("/film", response_model=pyd.BaseFilm)
+def create_film(film:pyd.CreateFilm, db:Session=Depends(get_db)):
+    film_db = db.query(m.Film).filter(m.Film.name == film.name).first()
+    if film_db:
+        raise HTTPException(400, "Такой фильм уже есть")
+    film_db = m.Film()
+    film_db.name = film.name
+    film_db.year = film.year
+    film_db.duration = film.duration
+    film_db.rating = film.rating
+    film_db.description = film.description
+    if film.genre == []:
+        raise HTTPException(status_code=404, detail="Добавте жанр")
+    else:
+        for genre_id in film.genre:
+           genre_id = db.query(m.Genre).filter(m.Genre.id == film.genre).first()
+           if genre_id:
+               film.genre.append(genre_id)
+           else:
+               raise HTTPException(status_code=404, detail="Жанр не найден")
+    film_db.date_added = datetime.now()
+    db.add(film_db)
+    db.commit()
+    return film_db
 
-# @app.post("/product/img/{product_id}", response_model=pyd.BaseProduct)
-# def create_product(product:pyd.CreateProduct, img: UploadFile, db:Session=Depends(get_db)):
-#     product_db = db.query(m.Product).filter(m.Product.name == product.name).first()
-#     if product_db:
-#         raise HTTPException(400, "Такой товар уже есть")    
-#     if img.content_type not in ("image/png", "image/jpeg"):
-#         raise HTTPException(400, "Такой товар уже есть")
-#     with open(f"files/{img.filename}", "wb") as f:
-#         shutil.copyfileobj(img.file, f)
-#     product_db = m.Product()
-#     product_db.img = f"files/{img.filename}"
-#     product_db.name = product.name
-#     db.add(product_db)
-#     db.commit()
-#     return product_db
+@app.put("/film/img/{film_id}", response_model=pyd.BaseFilm)
+def add_film_img(film_id: int, img: UploadFile, db:Session=Depends(get_db)):
+    film = db.query(m.Film).filter(
+        m.Film.id == film_id
+    ).first()
+    if not film:
+        raise HTTPException(status_code=404, detail="Фильм не найден")
+    if img.content_type not in ("image/png", "image/jpeg"):
+        raise HTTPException(400, "Неверный формат")
+    with open(f"files/{img.filename}", "wb") as f:
+        shutil.copyfileobj(img.file, f)
+    film.img = f"files/{img.filename}"
+    img.file.seek(0, os.SEEK_END)
+    size_mb = img.file.tell() / (1024 * 1024)
+    img.file.seek(0)
+    if size_mb > MAX_FILE_SIZE_MB:
+        raise HTTPException(status_code=400, detail=f"Размер файла превышает {MAX_FILE_SIZE_MB} МБ")
+    ext = img.filename.split('.')[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    with open(filepath, "wb") as f:
+        shutil.copyfileobj(img.file, f)
+    film.img = filepath
+    db.commit()
+    db.refresh(film)
+    return film
 
+@app.put("/film/{film_id}", response_model=pyd.BaseFilm)
+def update_film_info(film_id: int, film_data: pyd.CreateFilm, db:Session=Depends(get_db)):
+    film = db.query(m.Film).filter(
+        m.Film.id == film_id
+    ).first()
+    if not film:
+        raise HTTPException(status_code=404, detail="Фильм не найден")
+    film.name = film_data.name
+    film.year = film_data.year
+    film.duration = film_data.duration
+    film.rating = film_data.rating
+    film.description = film_data.description
+    film.date_added = datetime.now()
+    genres = db.query(m.Genre).filter(m.Genre.id.in_(film_data.genre)).all()
+    if len(genres) != len(film_data.genre):
+        raise HTTPException(status_code=400, detail="Некоторые жанры не найдены")
+    film.genres = genres
+    db.commit()
+    db.refresh(film)
+    return film
 
-# @app.delete("/product/{product_id}")
-# def del_product(product_id:int, db:Session=Depends(get_db)):
-#     product = db.query(m.Product).filter(
-#         m.Product.id == product_id
-#     ).first()
-#     if not product:
-#         raise HTTPException(404, 'Товар не найден')
-#     db.delete(product)
+@app.delete("/film/{film_id}")
+def del_film(film_id:int, db:Session=Depends(get_db)):
+    film = db.query(m.Film).filter(
+        m.Film.id == film_id
+    ).first()
+    if not film:
+        raise HTTPException(404, 'Товар не найден')
+    db.delete(film)
+    db.commit()
+    return "Фильм удален"
+
+@app.get("/genre", response_model=List[pyd.GenreSchema])
+def get_all_genre(db:Session=Depends(get_db)):
+    genre = db.query(m.Genre).all()
+    return genre
+
+@app.post("/genre", response_model=pyd.BaseGenre)
+def create_genre(genre:pyd.CreateGenre, db:Session=Depends(get_db)):
+    genre_db = db.query(m.Genre).filter(m.Genre.name == genre.name).first()
+    if genre_db:
+        raise HTTPException(400, "Такой жанр уже есть")
+    genre_db = m.Genre()
+    genre_db.name = genre.name
+    genre_db.description = genre.description
+    db.add(genre_db)
+    db.commit()
+    return genre_db

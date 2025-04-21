@@ -13,19 +13,19 @@ class Genre(Base):
     __tablename__ = "genres"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(255), unique=True)
+    name = Column(String(255), unique=True, nullable = False)
     description = Column(String(255), nullable=True)
 
 class Film(Base):
     __tablename__ = "films"
 
     id = Column(Integer, primary_key = True)
-    name = Column(String(255), unique = True)
-    year = Column(Integer)
-    duration = Column(Float)
-    rating = Column(Integer)
+    name = Column(String(255), unique = True, nullable = False)
+    year = Column(Integer, nullable = False)
+    duration = Column(Float, nullable = False)
+    rating = Column(Integer, nullable = False)
     description = Column(String(255), nullable=True)
     img = Column(String(255), nullable=True)
-    date_added = Column(Date)
+    date_added = Column(Date, nullable = False)
 
     genres = relationship("Genre", secondary="film_genre", backref="films")

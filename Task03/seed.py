@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from database import engine
 import models as m
 
-# Для создания бд
 m.Base.metadata.drop_all(bind = engine)
 m.Base.metadata.create_all(bind = engine)
 
@@ -24,7 +23,12 @@ with Session(bind = engine) as session:
         genres=[g1, g2],
         date_added = datetime.now()
         )
+    u1 = m.User(
+        username = "J5",
+        passwrod =  "qwerty",
+        email = "dasdasd",
+        created_at = datetime.now()
+    )
 
-    session.add_all([g1, f1, g2, f2])
-
+    session.add_all([g1, f1, g2, f2, u1])
     session.commit()

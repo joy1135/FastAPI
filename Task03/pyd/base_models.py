@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 
 class BaseFilm(BaseModel):
     id: int = Field(example=1)
@@ -18,3 +18,9 @@ class BaseGenre(BaseModel):
     name: str = Field(max_length=255, example='Фантастика')
     description: str | None = Field(None, max_length=255, example='...')
     
+class BaseUser(BaseModel):
+    id: int = Field(None, gt=0, example=1)
+    username: str = Field(example="J7")
+    passwrod: str = Field(example="123")
+    email: EmailStr = Field(example="j7@mail.com")
+    created_at: datetime = Field(example=datetime.now())

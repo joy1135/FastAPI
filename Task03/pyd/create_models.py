@@ -16,3 +16,8 @@ class CreateFilm(BaseModel):
 class CreateGenre(BaseModel):
     name: str = Field(..., min_length=3, max_length=255)
     description: str | None = Field(None,max_length=255)
+
+class CreateUser(BaseModel):
+    username: str = Field(..., max_length=60)
+    passwrod: str = Field(..., max_length=255)
+    email: str = Field(..., max_length=255)

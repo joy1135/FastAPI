@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 import models as m
 from typing import List
 import pyd
+from auth import basic_auth
 
 app = FastAPI()
 MAX_FILE_SIZE_MB = 5
@@ -29,32 +30,40 @@ def get_film(film_id:int, db:Session=Depends(get_db)):
 
 
 @app.post("/film", response_model=pyd.BaseFilm)
-def create_film(film:pyd.CreateFilm, db:Session=Depends(get_db)):
+def create_film(
+    film: pyd.CreateFilm,
+    user: m.User = Depends(basic_auth),
+    db: Session = Depends(get_db)
+):
     film_db = db.query(m.Film).filter(m.Film.name == film.name).first()
     if film_db:
         raise HTTPException(400, "Такой фильм уже есть")
-    film_db = m.Film()
-    film_db.name = film.name
-    film_db.year = film.year
-    film_db.duration = film.duration
-    film_db.rating = film.rating
-    film_db.description = film.description
-    if film.genre == []:
-        raise HTTPException(status_code=404, detail="Добавте жанр")
-    else:
-        for genre_id in film.genre:
-           genre_id = db.query(m.Genre).filter(m.Genre.id == film.genre).first()
-           if genre_id:
-               film.genre.append(genre_id)
-           else:
-               raise HTTPException(status_code=404, detail="Жанр не найден")
-    film_db.date_added = datetime.now()
+    
+    film_db = m.Film(
+        name=film.name,
+        year=film.year,
+        duration=film.duration,
+        rating=film.rating,
+        description=film.description,
+        date_added=datetime.now()
+    )
+    
+    if not film.genre:
+        raise HTTPException(status_code=400, detail="Добавьте хотя бы один жанр")
+    
+    for genre_id in film.genre:
+        genre = db.query(m.Genre).filter(m.Genre.id == genre_id).first()
+        if not genre:
+            raise HTTPException(status_code=404, detail=f"Жанр с id {genre_id} не найден")
+        film_db.genres.append(genre) 
+    
     db.add(film_db)
     db.commit()
+    db.refresh(film_db)
     return film_db
 
 @app.put("/film/img/{film_id}", response_model=pyd.BaseFilm)
-def add_film_img(film_id: int, img: UploadFile, db:Session=Depends(get_db)):
+def add_film_img(film_id: int, img: UploadFile, user: m.User = Depends(basic_auth), db:Session=Depends(get_db)):
     film = db.query(m.Film).filter(
         m.Film.id == film_id
     ).first()
@@ -82,7 +91,7 @@ def add_film_img(film_id: int, img: UploadFile, db:Session=Depends(get_db)):
     return film
 
 @app.put("/film/{film_id}", response_model=pyd.BaseFilm)
-def update_film_info(film_id: int, film_data: pyd.CreateFilm, db:Session=Depends(get_db)):
+def update_film_info(film_id: int, film_data: pyd.CreateFilm, user: m.User = Depends(basic_auth), db:Session=Depends(get_db)):
     film = db.query(m.Film).filter(
         m.Film.id == film_id
     ).first()
@@ -103,7 +112,7 @@ def update_film_info(film_id: int, film_data: pyd.CreateFilm, db:Session=Depends
     return film
 
 @app.delete("/film/{film_id}")
-def del_film(film_id:int, db:Session=Depends(get_db)):
+def del_film(film_id:int, user: m.User = Depends(basic_auth), db:Session=Depends(get_db)):
     film = db.query(m.Film).filter(
         m.Film.id == film_id
     ).first()
@@ -119,7 +128,7 @@ def get_all_genre(db:Session=Depends(get_db)):
     return genre
 
 @app.post("/genre", response_model=pyd.BaseGenre)
-def create_genre(genre:pyd.CreateGenre, db:Session=Depends(get_db)):
+def create_genre(genre:pyd.CreateGenre, user: m.User = Depends(basic_auth), db:Session=Depends(get_db)):
     genre_db = db.query(m.Genre).filter(m.Genre.name == genre.name).first()
     if genre_db:
         raise HTTPException(400, "Такой жанр уже есть")
